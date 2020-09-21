@@ -14,6 +14,9 @@ git clone https://github.com/googleinterns/tsec-validation.git
 
 # Install dependencies
 yarn
+
+# Run linter
+yarn run eslint .
 ```
 
 ### Run
