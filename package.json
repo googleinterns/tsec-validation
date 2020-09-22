@@ -1,0 +1,22 @@
+{
+  "name": "tsec-validation",
+  "version": "0.0.1",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "tt-runtime-check": "node src/ttruntime.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "Anna Kramarska @annkamsk",
+  "license": "Apache License 2.0",
+  "dependencies": {
+    "puppeteer": "^5.2.1",
+    "source-map": "^0.7.3",
+    "yargs": "^15.4.1"
+  },
+  "devDependencies": {
+    "eslint": "^7.9.0",
+    "eslint-config-google": "^0.14.0"
+  }
+}

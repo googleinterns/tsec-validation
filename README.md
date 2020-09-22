@@ -6,6 +6,30 @@ This repository contains the code for a tool identifying runtime
 Trusted Types (TT) violations that were not found through static
 analysis tools like https://github.com/googleinterns/tsec
 
+## Build and run
+### Build
+```shell script
+# Clone the repository
+git clone https://github.com/googleinterns/tsec-validation.git
+
+# Install dependencies
+yarn
+
+# Run linter
+yarn run eslint .
+```
+
+### Run
+The tested application must be already running.
+```shell script
+node src/ttruntime.js
+```
+
+Options:  
+* `-e {TEST_ENDPOINT}` – tested application's URL, default: `http://127.0.0.1:8080`
+* `-p {TEST_PATH}` – project root of tested application's source code
+* `--no-headless` – open browser while running tests
+* `--verbose` – enable verbose logging on request interception
 
 ## Source Code Headers
 
