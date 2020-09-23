@@ -16,13 +16,13 @@ git clone https://github.com/googleinterns/tsec-validation.git
 yarn
 
 # Run linter
-yarn run eslint .
+yarn lint
 ```
 
 ### Run
 The tested application must be already running.
 ```shell script
-node src/ttruntime.js
+yarn tt-runtime-check
 ```
 
 Options:  
