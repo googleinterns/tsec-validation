@@ -14,8 +14,10 @@ distributed under the License is distributed on an "AS IS" BASIS,
 limitations under the License.
 */
 
-const puppeteer = require('puppeteer');
-const yargs = require('yargs');
+import {Page, CDPSession, launch} from "puppeteer";
+import * as yargs from 'yargs';
+import Protocol from "devtools-protocol";
+import HeaderEntry = Protocol.Fetch.HeaderEntry;
 
 const argv = yargs
     .option('endpoint', {
@@ -28,7 +30,7 @@ const argv = yargs
         description: 'Verbose logging',
         type: 'boolean',
     })
-    .option('no-headless', {
+    .option('headless', {
         alias: 'hl',
         description: 'Open browser in the headless mode. Default: true',
         type: 'boolean',
@@ -44,7 +46,7 @@ const argv = yargs
 
 const violations = new Map();
 
-function saveViolation(data) {
+function saveViolation(data: string) {
     const report = JSON.parse(data)['csp-report'];
     if (report) {
         const location = `${report['source-file']}:${report['line-number']}:${report['column-number']}`;
@@ -55,18 +57,18 @@ function saveViolation(data) {
     }
 }
 
-async function addCSPReportOnlyHeader(client, requestId, responseHeaders) {
+async function addCSPReportOnlyHeader(client: CDPSession, requestId: string, responseHeaders: Array<HeaderEntry>) {
     const newHeaders = responseHeaders;
     newHeaders.push({
         name: 'Content-Security-Policy-Report-Only',
-        value: `require-trusted-types-for \'script\'; report-uri ${argv.endpoint || 'http://127.0.0.1:8080'}`,
+        value: `require-trusted-types-for 'script'; report-uri ${argv.endpoint || 'http://127.0.0.1:8080'}`,
     });
 
     if (argv.verbose) {
         console.log(`Continuing interception ${requestId}`);
     }
-    const response = await client.send('Fetch.getResponseBody', {requestId});
-    await client.send('Fetch.fulfillRequest', {
+    const response = <{ body: string, base64Encoded: boolean}>await client.send('Fetch.getResponseBody', {requestId});
+    await client.send('Fetch.fulfillRequest', <Protocol.Fetch.GetResponseBodyRequest>{
         requestId: requestId,
         responseHeaders: newHeaders,
         responseCode: 200,
@@ -74,13 +76,13 @@ async function addCSPReportOnlyHeader(client, requestId, responseHeaders) {
     });
 }
 
-async function intercept(page) {
+async function intercept(page: Page) {
     const client = await page.target().createCDPSession();
 
     await client.send('Fetch.enable', {
         patterns: [
             {requestStage: 'Response', resourceType: 'Document'},
-            {requestStage: 'Response', resourceType: 'CSPViolationReport'},
+            {requestStage: 'Request', resourceType: 'CSPViolationReport'},
         ],
     });
 
@@ -90,14 +92,14 @@ async function intercept(page) {
             console.log(`Intercepted ${request.url} {interception id: ${requestId}}`);
         }
         switch (resourceType) {
-            case 'CSPViolationReport':
-                saveViolation(event.request.postData);
-                return;
-            case 'Document':
-                await addCSPReportOnlyHeader(client, requestId, responseHeaders);
-                return;
-            default:
-                return;
+        case 'CSPViolationReport':
+            saveViolation(event.request.postData);
+            return;
+        case 'Document':
+            await addCSPReportOnlyHeader(client, requestId, responseHeaders);
+            return;
+        default:
+            return;
         }
     });
 }
@@ -110,7 +112,7 @@ function printReport() {
 }
 
 (async function main() {
-    const browser = await puppeteer.launch({
+    const browser = await launch({
         headless: argv.headless || true,
         devtools: true,
     });
@@ -119,8 +121,9 @@ function printReport() {
 
     await intercept(page);
 
-    await page.goto(argv.endpoint || 'http://127.0.0.1:8080', 'networkidle2');
+    await page.goto(argv.endpoint || 'http://127.0.0.1:8080', {
+        waitUntil: 'networkidle2',
+    });
 
-    // FIXME do it better
-    setTimeout(printReport, 3000);
+    printReport()
 })();

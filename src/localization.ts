@@ -14,19 +14,21 @@ distributed under the License is distributed on an "AS IS" BASIS,
 limitations under the License.
 */
 
-const sourceMap = require('source-map');
-const fs = require('fs');
+import {SourceMapConsumer} from 'source-map';
+import * as fs from 'fs';
+
+interface Location {
+    path: string;
+    line: number;
+    column: number;
+}
 
 /**
  * Find the path of a source TypeScript file on the disk
  * for a JS file in the web app.
- *
- * @param {string} location
- * @param {string} projectRoot
- * @return {Promise<*[]|undefined|*>}
  */
-async function getOriginalLocation(location, projectRoot) {
-    const [path, line, col] = location;
+async function getOriginalLocation(location: Location, projectRoot: string): Promise<Location | undefined> {
+    const {path, line, column} = location;
     if (!path) {
         return undefined;
     }
@@ -35,19 +37,23 @@ async function getOriginalLocation(location, projectRoot) {
         if (!fs.existsSync(sourceMapPath)) {
             return location;
         }
-        const tsPath = `${projectRoot}/${path.replace('.js', '.ts')}`;
 
         const rawData = fs.readFileSync(sourceMapPath, 'utf8');
         const rawSourceMap = JSON.parse(rawData);
 
-        const result = await sourceMap.SourceMapConsumer.with(rawSourceMap, null, (consumer) => {
+        const result = await SourceMapConsumer.with(rawSourceMap, null, (consumer: SourceMapConsumer) => {
             return consumer.originalPositionFor({
-                source: tsPath,
                 line: line - 1,
-                column: col - 1,
+                column: column - 1
             });
         });
-        return [result.source, result.line + 1, result.column + 1];
+        if (result.source && result.line && result.column) {
+            return {
+                path: result.source,
+                line: result.line + 1,
+                column: result.column + 1,
+            };
+        }
     } catch (err) {
         console.error(err);
     }
