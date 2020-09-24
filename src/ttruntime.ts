@@ -18,6 +18,7 @@ import {Page, CDPSession, launch} from "puppeteer";
 import * as yargs from 'yargs';
 import Protocol from "devtools-protocol";
 import HeaderEntry = Protocol.Fetch.HeaderEntry;
+import {getOriginalLocation, Location} from './localization';
 
 const argv = yargs
     .option('endpoint', {
@@ -44,16 +45,20 @@ const argv = yargs
     .alias('help', 'h')
     .argv;
 
-const violations = new Map();
+let violations = new Map<Location, Array<string>>();
 
 function saveViolation(data: string) {
     const report = JSON.parse(data)['csp-report'];
     if (report) {
-        const location = `${report['source-file']}:${report['line-number']}:${report['column-number']}`;
+        const location = {
+            path: report['source-file'],
+            line: report['line-number'],
+            column: report['column-number'],
+        };
         if (!violations.has(location)) {
-            violations.set(location, []);
+            violations = violations.set(location, []);
         }
-        violations.get(location).push(report);
+        violations.get(location)?.push(report['script-sample']);
     }
 }
 
@@ -108,7 +113,11 @@ function printReport() {
     const violationsCount = Array.from(violations.values())
         .reduce((x, y) => x + y.length, 0);
     console.log(`Found ${violationsCount} violation${violationsCount === 1 ? '' : 's'}.`);
-    // TODO add ts file localization
+    let i = 1;
+    violations.forEach(async (value: Array<string>, key: Location) => {
+        const location = await getOriginalLocation(key, argv.path || '.')
+        console.error(`${i++}. source: ${location ? `${location.path}:${location.line}:${location.column}` : key}, violations: [${value.join('\n')}]`);
+    });
 }
 
 (async function main() {
