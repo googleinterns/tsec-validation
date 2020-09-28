@@ -16,9 +16,16 @@ limitations under the License.
 
 import {SourceMapConsumer} from 'source-map';
 import * as fs from 'fs';
+import * as path from 'path';
 
-export interface Location {
+export interface DiskLocation {
     path: string;
+    line: number;
+    column: number;
+}
+
+export interface WebLocation {
+    url: string;
     line: number;
     column: number;
 }
@@ -27,16 +34,16 @@ export interface Location {
  * Find the path of a source TypeScript file on the disk
  * for a JS file in the web app.
  */
-export async function getOriginalLocation(location: Location, projectRoot: string): Promise<Location | undefined> {
-    const {path, line, column} = location;
-    if (!path) {
+export async function getOriginalLocation(location: WebLocation, projectRoot: string): Promise<DiskLocation | undefined> {
+    const {url, line, column} = location;
+    if (!url) {
         return undefined;
     }
-    const localPath = translateToLocalPath(path, projectRoot);
+    const localPath = webUrlToDiskPath(url, projectRoot);
     const sourceMapPath = getSourceMapFile(localPath);
     try {
         if (!sourceMapPath || !fs.existsSync(sourceMapPath)) {
-            return location;
+            return undefined;
         }
 
         const rawData = fs.readFileSync(sourceMapPath, { encoding: 'utf8' });
@@ -64,9 +71,9 @@ export async function getOriginalLocation(location: Location, projectRoot: strin
  * Translates a static file web URL to local file path.
  * Assumes that the files are served from ${webUri}/static path
  */
-function translateToLocalPath(webPath: string, projectRoot: string): string {
-    const [, path] = webPath.split('static/');
-    return `${projectRoot}${projectRoot.endsWith('/') ? '' : '/'}${path}`;
+function webUrlToDiskPath(webPath: string, projectRoot: string): string {
+    const [, file] = webPath.split('static/');
+    return path.join(projectRoot, file);
 }
 
 /**
@@ -79,10 +86,6 @@ function getSourceMapFile(localJSPath: string): string | undefined {
     const match = jsFile.trimEnd().match(/\/\/# sourceMappingURL=(.*\.map)/);
     if (match) {
         const sourceMapPath = match[1];
-        return localJSPath
-            .split('/')
-            .filter(v => v != null)
-            .reduce((path, v, idx, arr) =>
-                idx === arr.length - 1 ? `${path}/${sourceMapPath}` : `${path}/${v}`);
+        return path.resolve(localJSPath, '..', sourceMapPath);
     }
 }
