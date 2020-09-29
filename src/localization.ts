@@ -16,9 +16,16 @@ limitations under the License.
 
 import {SourceMapConsumer} from 'source-map';
 import * as fs from 'fs';
+import * as path from 'path';
 
-interface Location {
+export interface DiskLocation {
     path: string;
+    line: number;
+    column: number;
+}
+
+export interface WebLocation {
+    url: string;
     line: number;
     column: number;
 }
@@ -27,18 +34,19 @@ interface Location {
  * Find the path of a source TypeScript file on the disk
  * for a JS file in the web app.
  */
-async function getOriginalLocation(location: Location, projectRoot: string): Promise<Location | undefined> {
-    const {path, line, column} = location;
-    if (!path) {
+export async function getOriginalLocation(location: WebLocation, projectRoot: string): Promise<DiskLocation | undefined> {
+    const {url, line, column} = location;
+    if (!url) {
         return undefined;
     }
-    const sourceMapPath = `${projectRoot}/${path}.map`;
+    const localPath = webUrlToDiskPath(url, projectRoot);
+    const sourceMapPath = getSourceMapFile(localPath);
     try {
-        if (!fs.existsSync(sourceMapPath)) {
-            return location;
+        if (!sourceMapPath || !fs.existsSync(sourceMapPath)) {
+            return undefined;
         }
 
-        const rawData = fs.readFileSync(sourceMapPath, 'utf8');
+        const rawData = fs.readFileSync(sourceMapPath, { encoding: 'utf8' });
         const rawSourceMap = JSON.parse(rawData);
 
         const result = await SourceMapConsumer.with(rawSourceMap, null, (consumer: SourceMapConsumer) => {
@@ -56,5 +64,28 @@ async function getOriginalLocation(location: Location, projectRoot: string): Pro
         }
     } catch (err) {
         console.error(err);
+    }
+}
+
+/**
+ * Translates a static file web URL to local file path.
+ * Assumes that the files are served from ${webUri}/static path
+ */
+function webUrlToDiskPath(webPath: string, projectRoot: string): string {
+    const [, file] = webPath.split('static/');
+    return path.join(projectRoot, file);
+}
+
+/**
+ * Searches for the path to source map file
+ * that should be in the comment at the end of corresponding JS file.
+ */
+function getSourceMapFile(localJSPath: string): string | undefined {
+    const jsFile = fs.readFileSync(localJSPath, { encoding: 'utf8' });
+
+    const match = jsFile.trimEnd().match(/\/\/# sourceMappingURL=(.*\.map)/);
+    if (match) {
+        const sourceMapPath = match[1];
+        return path.resolve(localJSPath, '..', sourceMapPath);
     }
 }

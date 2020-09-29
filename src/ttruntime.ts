@@ -18,6 +18,8 @@ import {Page, CDPSession, launch} from "puppeteer";
 import * as yargs from 'yargs';
 import Protocol from "devtools-protocol";
 import HeaderEntry = Protocol.Fetch.HeaderEntry;
+import {getOriginalLocation} from './localization';
+import {ViolationReport} from './violationReport';
 
 const argv = yargs
     .option('endpoint', {
@@ -44,16 +46,20 @@ const argv = yargs
     .alias('help', 'h')
     .argv;
 
-const violations = new Map();
+const violations = new Map<string, ViolationReport>();
 
 function saveViolation(data: string) {
     const report = JSON.parse(data)['csp-report'];
     if (report) {
-        const location = `${report['source-file']}:${report['line-number']}:${report['column-number']}`;
-        if (!violations.has(location)) {
-            violations.set(location, []);
+        const key = ViolationReport.toKey(report['source-file'], report['line-number'], report['column-number']);
+        if (!violations.has(key)) {
+            violations.set(key, new ViolationReport({
+                url: report['source-file'],
+                line: report['line-number'],
+                column: report['column-number'],
+            }));
         }
-        violations.get(location).push(report);
+        violations.get(key)!.addOccurrence(report['script-sample']);
     }
 }
 
@@ -104,11 +110,28 @@ async function intercept(page: Page) {
     });
 }
 
-function printReport() {
+async function resolveLocations(): Promise<Array<ViolationReport>> {
+    const sortedByLocation = Array.from(violations.entries())
+        .sort(([loc1,], [loc2,]) => loc1 > loc2 ? 1 : -1)
+
+    const locationsValues = await Promise.all(
+        sortedByLocation.map(([, viol]) => getOriginalLocation(viol.webLocation, argv.path || '.'))
+    );
+    return sortedByLocation.map(([, viol], idx) => {
+        viol.diskLocation = locationsValues[idx];
+        return viol;
+    })
+}
+
+async function printReport() {
     const violationsCount = Array.from(violations.values())
-        .reduce((x, y) => x + y.length, 0);
-    console.log(`Found ${violationsCount} violation${violationsCount === 1 ? '' : 's'}.`);
-    // TODO add ts file localization
+        .reduce((x, y) => x + y.count, 0);
+    console.error(`Found ${violationsCount} violation${violationsCount === 1 ? '' : 's'}.`);
+
+    const violationsWithResolvedLocations = await resolveLocations();
+    violationsWithResolvedLocations.forEach((value, idx) => {
+        console.error(`${idx + 1}. ${value}`);
+    });
 }
 
 (async function main() {
@@ -125,5 +148,5 @@ function printReport() {
         waitUntil: 'networkidle2',
     });
 
-    printReport()
+    await printReport()
 })();
