@@ -20,6 +20,7 @@ import Protocol from "devtools-protocol";
 import HeaderEntry = Protocol.Fetch.HeaderEntry;
 import {getOriginalLocation} from './localization';
 import {ViolationReport} from './violationReport';
+import * as readline from 'readline';
 
 const argv = yargs
     .option('endpoint', {
@@ -34,13 +35,23 @@ const argv = yargs
     })
     .option('headless', {
         alias: 'hl',
-        description: 'Open browser in the headless mode. Default: true',
+        description: 'Open browser in the headless mode. Default: false',
         type: 'boolean',
     })
     .option('path', {
         alias: 'p',
-        description: 'Path to the tested project\'s root. Default: this project\'s root',
+        description: 'Path to the tested project\'s root. If it\'s not provided only the Web violation locations will be reported.',
         type: 'string',
+    })
+    .option('timeout', {
+        alias: 't',
+        description: 'How long (in ms) to wait for the incoming violation reports. Default: 10000',
+        type: 'number'
+    })
+    .option('interactive', {
+        alias: 'i',
+        description: 'Interactive mode. Leaves the browser open. Prints the report after user kills the app. Default: false',
+        type: 'boolean',
     })
     .help()
     .alias('help', 'h')
@@ -115,7 +126,7 @@ async function resolveLocations(): Promise<Array<ViolationReport>> {
         .sort(([loc1,], [loc2,]) => loc1 > loc2 ? 1 : -1)
 
     const locationsValues = await Promise.all(
-        sortedByLocation.map(([, viol]) => getOriginalLocation(viol.webLocation, argv.path || '.'))
+        sortedByLocation.map(([, viol]) => getOriginalLocation(viol.webLocation, argv.path))
     );
     return sortedByLocation.map(([, viol], idx) => {
         viol.diskLocation = locationsValues[idx];
@@ -134,9 +145,23 @@ async function printReport() {
     });
 }
 
+async function printReportOnExit() {
+    readline.emitKeypressEvents(process.stdin);
+    process.stdin.setRawMode(true);
+    await process.stdin.on('keypress', async (str, key) => {
+        if (key.ctrl && key.name === 'c') {
+            await printReport();
+            process.exit();
+        } else {
+            console.log('Press CTRL+C to print report and finish.');
+        }
+    });
+    console.log('Press CTRL+C to print report and finish.');
+}
+
 (async function main() {
     const browser = await launch({
-        headless: argv.headless || true,
+        headless: argv.headless || false,
         devtools: true,
     });
 
@@ -144,9 +169,19 @@ async function printReport() {
 
     await intercept(page);
 
-    await page.goto(argv.endpoint || 'http://127.0.0.1:8080', {
-        waitUntil: 'networkidle2',
-    });
-
-    await printReport()
+    if (argv.interactive) {
+        await printReportOnExit();
+    } else {
+        try {
+            await page.goto(argv.endpoint || 'http://127.0.0.1:8080', {
+                waitUntil: 'networkidle2',
+                timeout: argv.timeout || 10000,
+            });
+        } catch (e) {
+            console.error(e);
+        } finally {
+            await printReport();
+            await browser.close();
+        }
+    }
 })();

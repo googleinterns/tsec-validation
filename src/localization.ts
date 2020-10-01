@@ -34,16 +34,23 @@ export interface WebLocation {
  * Find the path of a source TypeScript file on the disk
  * for a JS file in the web app.
  */
-export async function getOriginalLocation(location: WebLocation, projectRoot: string): Promise<DiskLocation | undefined> {
+export async function getOriginalLocation(location: WebLocation, projectRoot?: string): Promise<DiskLocation | undefined> {
     const {url, line, column} = location;
-    if (!url) {
+    if (!url || !projectRoot) {
         return undefined;
     }
     const localPath = webUrlToDiskPath(url, projectRoot);
+    if (!localPath) {
+        return undefined;
+    }
     const sourceMapPath = getSourceMapFile(localPath);
     try {
         if (!sourceMapPath || !fs.existsSync(sourceMapPath)) {
-            return undefined;
+            return {
+                path: localPath,
+                line: line,
+                column: column
+            };
         }
 
         const rawData = fs.readFileSync(sourceMapPath, { encoding: 'utf8' });
@@ -71,9 +78,11 @@ export async function getOriginalLocation(location: WebLocation, projectRoot: st
  * Translates a static file web URL to local file path.
  * Assumes that the files are served from ${webUri}/static path
  */
-function webUrlToDiskPath(webPath: string, projectRoot: string): string {
+function webUrlToDiskPath(webPath: string, projectRoot: string): string | undefined {
     const [, file] = webPath.split('static/');
-    return path.join(projectRoot, file);
+    if (file) {
+        return path.join(projectRoot, file);
+    }
 }
 
 /**
