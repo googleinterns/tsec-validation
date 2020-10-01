@@ -58,14 +58,14 @@ export async function getOriginalLocation(location: WebLocation, projectRoot?: s
 
         const result = await SourceMapConsumer.with(rawSourceMap, null, (consumer: SourceMapConsumer) => {
             return consumer.originalPositionFor({
-                line: line - 1,
+                line: line,
                 column: column - 1
             });
         });
         if (result.source && result.line && result.column) {
             return {
                 path: result.source,
-                line: result.line + 1,
+                line: result.line,
                 column: result.column + 1,
             };
         }

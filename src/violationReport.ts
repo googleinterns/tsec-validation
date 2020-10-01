@@ -43,4 +43,11 @@ export class ViolationReport {
     toString(): string {
         return `source: ${this.key}\n code samples: ${this.scriptSample.join('\n')}`;
     }
+    locationEquals(location: DiskLocation): boolean {
+        if (!this.diskLocation) {
+            return false;
+        }
+        // in tsec the columns are often not accurate, so let's stick to path + line
+        return this.diskLocation.path.endsWith(location.path) && this.diskLocation.line === location.line;
+    }
 }

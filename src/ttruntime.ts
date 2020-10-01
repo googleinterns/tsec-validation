@@ -21,6 +21,7 @@ import HeaderEntry = Protocol.Fetch.HeaderEntry;
 import {getOriginalLocation} from './localization';
 import {ViolationReport} from './violationReport';
 import * as readline from 'readline';
+import {compareWithTsecResults} from "./tsecValidation";
 
 const argv = yargs
     .option('endpoint', {
@@ -46,12 +47,16 @@ const argv = yargs
     .option('timeout', {
         alias: 't',
         description: 'How long (in ms) to wait for the incoming violation reports. Default: 10000',
-        type: 'number'
+        type: 'number',
     })
     .option('interactive', {
         alias: 'i',
         description: 'Interactive mode. Leaves the browser open. Prints the report after user kills the app. Default: false',
         type: 'boolean',
+    })
+    .option('validation', {
+        description: 'Tsec validation mode. Takes the output from tsec and prints missed violations.',
+        type: 'string',
     })
     .help()
     .alias('help', 'h')
@@ -93,7 +98,7 @@ async function addCSPReportOnlyHeader(client: CDPSession, requestId: string, res
     });
 }
 
-async function intercept(page: Page) {
+export async function intercept(page: Page): Promise<void> {
     const client = await page.target().createCDPSession();
 
     await client.send('Fetch.enable', {
@@ -145,13 +150,19 @@ async function printReport() {
     });
 }
 
-async function printReportOnExit() {
+async function printReportWithTsecValidation() {
+    const violationsWithResolvedLocations = await resolveLocations();
+    compareWithTsecResults(argv.validation!, violationsWithResolvedLocations);
+}
+
+async function printReportOnExit(printFunction: () => Promise<void>) {
     readline.emitKeypressEvents(process.stdin);
     process.stdin.setRawMode(true);
-    await process.stdin.on('keypress', async (str, key) => {
+    process.stdin.on('keypress', async (str, key) => {
         if (key.ctrl && key.name === 'c') {
-            await printReport();
-            process.exit();
+            printFunction().then(() => {
+                process.exit();
+            });
         } else {
             console.log('Press CTRL+C to print report and finish.');
         }
@@ -169,8 +180,10 @@ async function printReportOnExit() {
 
     await intercept(page);
 
+    const printFunction = argv.validation ? printReportWithTsecValidation : printReport;
+
     if (argv.interactive) {
-        await printReportOnExit();
+        await printReportOnExit(printFunction);
     } else {
         try {
             await page.goto(argv.endpoint || 'http://127.0.0.1:8080', {
@@ -180,8 +193,8 @@ async function printReportOnExit() {
         } catch (e) {
             console.error(e);
         } finally {
-            await printReport();
             await browser.close();
         }
+        await printFunction();
     }
 })();
