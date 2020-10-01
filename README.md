@@ -17,6 +17,9 @@ yarn
 
 # Run linter
 yarn lint
+
+# Compile the project
+yarn build
 ```
 
 ### Run
@@ -26,10 +29,12 @@ yarn tt-runtime-check
 ```
 
 Options:  
-* `-e {TEST_ENDPOINT}` – tested application's URL, default: `http://127.0.0.1:8080`
-* `-p {TEST_PATH}` – project root of tested application's source code
-* `--no-headless` – open browser while running tests
-* `--verbose` – enable verbose logging on request interception
+* `--endpoint -e {TEST_ENDPOINT}` – tested application's URL, default: `http://127.0.0.1:8080`
+* `--path -p {TEST_PATH}` – project root of tested application's source code, if not provided then only the web locations of violations are reported.
+* `--headless -hl` – do not open browser while running tests
+* `--verbose -v` – enable verbose logging on request interception
+* `--interactive -i` – run application in the interactive mode, the report will be printed after pressing CTRL+c.
+* `--timeout -t` – the time in ms the application waits for violation reports. Default: 10000
 
 ## Source Code Headers
 
